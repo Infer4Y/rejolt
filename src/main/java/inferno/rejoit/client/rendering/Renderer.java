@@ -109,10 +109,6 @@ public class Renderer {
         // bindings available for use.
         GL.createCapabilities();
         glEnable(GL_DEPTH_TEST);
-
-        glMatrixMode(GL_PROJECTION);
-        glLoadIdentity();
-        glOrtho(0, 640, 480, 0, 1, -1);
         glMatrixMode(GL_MODELVIEW);
 
         int vaoID = glGenVertexArrays();
@@ -156,10 +152,42 @@ public class Renderer {
             glBindVertexArray(vaoID);
             glEnableVertexAttribArray(0);
 
-            GL11.glColor3f(0.5f,0.5f,1.0f);
+            glColor3f(0.5f,0.5f,1.0f);
+
+
+
+            //glLoadIdentity(); // Reset model-view matrix
+            //glTranslatef(-1.0f, 0.0f, -2.0f);
 
             // Draw a triangle of 3 vertices
-            glDrawArrays(GL_TRIANGLES, 0, 36);
+            glDrawArrays(GL_TRIANGLES, 0, 3);
+            glColor3f(0.5f,0.5f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 3, 3);
+            glColor3f(0.5f,0.0f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 6, 3);
+            glColor3f(0.0f,0.5f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 9, 3);
+            glColor3f(0.5f,0.5f,0.0f);
+            glDrawArrays(GL_TRIANGLES, 12, 3);
+            glColor3f(0.5f,1f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 15, 3);
+            glColor3f(0f,0.5f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 18, 3);
+            glColor3f(0.5f,0.5f,0.0f);
+            glDrawArrays(GL_TRIANGLES, 21, 3);
+            glColor3f(0.5f,1f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 24, 3);
+            glColor3f(0f,0.5f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 27, 3);
+            glColor3f(0.5f,0.5f,0.0f);
+            glDrawArrays(GL_TRIANGLES, 30, 3);
+            glColor3f(0.5f,1f,1.0f);
+            glDrawArrays(GL_TRIANGLES, 33, 3);
+            glColor3f(0.5f,0.5f,0.0f);
+
+            glRotatef(.15f, .1f,.1f,.1f);
+
+            glTranslatef(1.0f, 0.0f, 2.0f);
 
             // Disable our location
             glDisableVertexAttribArray(0);
