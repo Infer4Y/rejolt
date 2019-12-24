@@ -1,16 +1,30 @@
+import org.gradle.internal.os.OperatingSystem
+
 plugins {
     id 'java'
     id 'org.jetbrains.kotlin.jvm' version '1.3.21'
 }
 
+project.ext.lwjglVersion = "3.2.3"
+project.ext.jomlVersion = "1.9.19"
+
+switch (OperatingSystem.current()) {
+    case OperatingSystem.LINUX:
+        def osArch = System.getProperty("os.arch")
+        project.ext.lwjglNatives = osArch.startsWith("arm") || osArch.startsWith("aarch64")
+                ? "natives-linux-${osArch.contains("64") || osArch.startsWith("armv8") ? "arm64" : "arm32"}"
+                : "natives-linux"
+        break
+    case OperatingSystem.WINDOWS:
+        project.ext.lwjglNatives = System.getProperty("os.arch").contains("64") ? "natives-windows" : "natives-windows-x86"
+        break
+}
 group 'inferno'
 version '1.0-SNAPSHOT'
 
 sourceCompatibility = 1.8
 
-project.ext.lwjglVersion = "3.2.3"
-project.ext.jomlVersion = "1.9.19"
-project.ext.lwjglNatives = "natives-windows"
+
 
 repositories {
     mavenCentral()
@@ -27,7 +41,7 @@ dependencies {
     implementation "org.lwjgl:lwjgl-nuklear"
     implementation "org.lwjgl:lwjgl-openal"
     implementation "org.lwjgl:lwjgl-opengl"
-    implementation "org.lwjgl:lwjgl-opus"
+    implementation "org.lwjgl:lwjgl-opengles"
     implementation "org.lwjgl:lwjgl-par"
     implementation "org.lwjgl:lwjgl-stb"
     implementation "org.lwjgl:lwjgl-vulkan"
@@ -39,7 +53,7 @@ dependencies {
     runtimeOnly "org.lwjgl:lwjgl-nuklear::$lwjglNatives"
     runtimeOnly "org.lwjgl:lwjgl-openal::$lwjglNatives"
     runtimeOnly "org.lwjgl:lwjgl-opengl::$lwjglNatives"
-    runtimeOnly "org.lwjgl:lwjgl-opus::$lwjglNatives"
+    runtimeOnly "org.lwjgl:lwjgl-opengles::$lwjglNatives"
     runtimeOnly "org.lwjgl:lwjgl-par::$lwjglNatives"
     runtimeOnly "org.lwjgl:lwjgl-stb::$lwjglNatives"
     implementation "org.joml:joml:${jomlVersion}"

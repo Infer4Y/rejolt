@@ -1,208 +1,103 @@
 package inferno.rejoit.client.rendering;
 
-import inferno.rejoit.client.models.ModelCube;
+import inferno.rejoit.client.models.GameItem;
+import inferno.rejoit.client.models.Mesh;
+import inferno.rejoit.client.shader.ShaderProgram;
+import inferno.rejoit.common.utils.Utils;
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
-import org.lwjgl.*;
-import org.lwjgl.glfw.*;
-import org.lwjgl.opengl.*;
-import org.lwjgl.system.*;
+import org.joml.Vector4f;
 
-import java.nio.*;
-import java.util.LinkedList;
-import java.util.List;
-
-import static org.lwjgl.glfw.Callbacks.*;
-import static org.lwjgl.glfw.GLFW.*;
 import static org.lwjgl.opengl.GL11.*;
-import static org.lwjgl.opengl.GL15.*;
-import static org.lwjgl.opengl.GL20.*;
-import static org.lwjgl.opengl.GL30.*;
-import static org.lwjgl.system.MemoryStack.*;
-import static org.lwjgl.system.MemoryUtil.*;
 
 public class Renderer {
-    private long window;
+    private static final float FOV = (float) Math.toRadians(60.0f);
 
-    List<Vector3f> things = new LinkedList<>();
+    private static final float Z_NEAR = 0.01f;
 
-    private ModelCube cube = new ModelCube();
+    private static final float Z_FAR = 1000.f;
 
-    public void run() {
-        System.out.println("Hello LWJGL " + Version.getVersion() + "!");
+    private final Transformation transformation;
 
-        init();
-        loop();
+    private ShaderProgram shaderProgram;
 
-        // Free the window callbacks and destroy the window
-        glfwFreeCallbacks(window);
-        glfwDestroyWindow(window);
+    private float specularPower;
 
-        // Terminate GLFW and free the error callback
-        glfwTerminate();
-        glfwSetErrorCallback(null).free();
+    public Renderer() {
+        transformation = new Transformation();
+        specularPower = 10f;
     }
 
-    private void init() {
-        // Setup an error callback. The default implementation
-        // will print the error message in System.err.
-        GLFWErrorCallback.createPrint(System.err).set();
+    public void init(Window window) throws Exception {
+        // Create shader
+        shaderProgram = new ShaderProgram();
+        shaderProgram.createVertexShader(Utils.loadResource("/shaders/vertex.vs"));
+        shaderProgram.createFragmentShader(Utils.loadResource("/shaders/fragment.fs"));
+        shaderProgram.link();
 
-        // Initialize GLFW. Most GLFW functions will not work before doing this.
-        if ( !glfwInit() )
-            throw new IllegalStateException("Unable to initialize GLFW");
-
-        // Configure GLFW
-        glfwDefaultWindowHints(); // optional, the current window hints are already the default
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE); // the window will stay hidden after creation
-        glfwWindowHint(GLFW_RESIZABLE, GLFW_TRUE); // the window will be resizable
-
-        // Create the window
-        window = glfwCreateWindow(300, 300, "Hello World!", NULL, NULL);
-        if ( window == NULL )
-            throw new RuntimeException("Failed to create the GLFW window");
-
-        // Setup a key callback. It will be called every time a key is pressed, repeated or released.
-        glfwSetKeyCallback(window, (window, key, scancode, action, mods) -> {
-            if ( key == GLFW_KEY_ESCAPE && action == GLFW_RELEASE )
-                glfwSetWindowShouldClose(window, true); // We will detect this in the rendering loop
-        });
-
-        // Get the thread stack and push a new frame
-        try ( MemoryStack stack = stackPush() ) {
-            IntBuffer pWidth = stack.mallocInt(1); // int*
-            IntBuffer pHeight = stack.mallocInt(1); // int*
-
-            // Get the window size passed to glfwCreateWindow
-            glfwGetWindowSize(window, pWidth, pHeight);
-
-            // Get the resolution of the primary monitor
-            GLFWVidMode vidmode = glfwGetVideoMode(glfwGetPrimaryMonitor());
-
-            // Center the window
-            glfwSetWindowPos(
-                    window,
-                    (vidmode.width() - pWidth.get(0)) / 2,
-                    (vidmode.height() - pHeight.get(0)) / 2
-            );
-        } // the stack frame is popped automatically
-
-        // Make the OpenGL context current
-        glfwMakeContextCurrent(window);
-        // Enable v-sync
-        glfwSwapInterval(1);
-
-        for (int i = 0; i < cube.getTrigs().length; i++) {
-            things.add(cube.getTrigs()[i].getPoint1());
-            things.add(cube.getTrigs()[i].getPoint2());
-            things.add(cube.getTrigs()[i].getPoint3());
-        }
-
-        // Make the window visible
-        glfwShowWindow(window);
+        // Create uniforms for modelView and projection matrices and texture
+        shaderProgram.createUniform("projectionMatrix");
+        shaderProgram.createUniform("modelViewMatrix");
+        shaderProgram.createUniform("texture_sampler");
+        // Create lighting related uniforms
+        shaderProgram.createUniform("specularPower");
+        shaderProgram.createUniform("ambientLight");
+        shaderProgram.createPointLightUniform("pointLight");
     }
 
-    private void loop() {
-        // This line is critical for LWJGL's interoperation with GLFW's
-        // OpenGL context, or any context that is managed externally.
-        // LWJGL detects the context that is current in the current thread,
-        // creates the GLCapabilities instance and makes the OpenGL
-        // bindings available for use.
-        GL.createCapabilities();
-        glEnable(GL_DEPTH_TEST);
-        glMatrixMode(GL_MODELVIEW);
+    public void clear() {
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    }
 
-        int vaoID = glGenVertexArrays();
-        glBindVertexArray(vaoID);
+    public void render(Window window, Camera camera, GameItem[] gameItems, Vector3f ambientLight,
+                       PointLight pointLight) {
 
-        List<Float> trigs = new LinkedList<>();
-        for (int i = 0; i < things.size(); i++) {
-            trigs.add(things.get(i).x);
-            trigs.add(things.get(i).y);
-            trigs.add(things.get(i).z);
+        clear();
+
+        if (window.isResized()) {
+            glViewport(0, 0, window.getWidth(), window.getHeight());
+            window.setResized(false);
         }
 
-        float[] trigsI = new float[trigs.size()];
+        shaderProgram.bind();
 
-        for (int i = 0; i < trigsI.length; i++) {
-            trigsI[i] = trigs.get(i);
+        // Update projection Matrix
+        Matrix4f projectionMatrix = transformation.getProjectionMatrix(FOV, window.getWidth(), window.getHeight(), Z_NEAR, Z_FAR);
+        shaderProgram.setUniform("projectionMatrix", projectionMatrix);
+
+        // Update view Matrix
+        Matrix4f viewMatrix = transformation.getViewMatrix(camera);
+
+        // Update Light Uniforms
+        shaderProgram.setUniform("ambientLight", ambientLight);
+        shaderProgram.setUniform("specularPower", specularPower);
+        // Get a copy of the light object and transform its position to view coordinates
+        PointLight currPointLight = new PointLight(pointLight);
+        Vector3f lightPos = currPointLight.getPosition();
+        Vector4f aux = new Vector4f(lightPos, 1);
+        aux.mul(viewMatrix);
+        lightPos.x = aux.x;
+        lightPos.y = aux.y;
+        lightPos.z = aux.z;
+        shaderProgram.setUniform("pointLight", currPointLight);
+
+        shaderProgram.setUniform("texture_sampler", 0);
+        // Render each gameItem
+        for (GameItem gameItem : gameItems) {
+            Mesh mesh = gameItem.getMesh();
+            // Set model view matrix for this item
+            Matrix4f modelViewMatrix = transformation.getModelViewMatrix(gameItem, viewMatrix);
+            shaderProgram.setUniform("modelViewMatrix", modelViewMatrix);
+            // Render the mesh for this game item
+            mesh.render();
         }
 
-        FloatBuffer verticesBuffer = BufferUtils.createFloatBuffer(trigsI.length);
-        FloatBuffer flip = verticesBuffer.put(trigsI).flip();
+        shaderProgram.unbind();
+    }
 
-        // Create a Buffer Object and upload the vertices buffer
-        int vboID = glGenBuffers();
-        glBindBuffer(GL_ARRAY_BUFFER, vboID);
-        glBufferData(GL_ARRAY_BUFFER, verticesBuffer, GL_STATIC_DRAW);
-
-        // Point the buffer at location 0, the location we set
-        // inside the vertex shader. You can use any location
-        // but the locations should match
-        glVertexAttribPointer(0, 2, GL_FLOAT, false, 0, 0);
-        glBindVertexArray(0);
-
-        // Set the clear color
-        glClearColor(1.0f, 0.0f, 0.0f, 0.0f);
-
-        // Run the rendering loop until the user has attempted to close
-        // the window or has pressed the ESCAPE key.
-        while ( !glfwWindowShouldClose(window) ) {
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT); // clear the framebuffer
-
-            glBindVertexArray(vaoID);
-            glEnableVertexAttribArray(0);
-
-            glColor3f(0.5f,0.5f,1.0f);
-
-
-
-            //glLoadIdentity(); // Reset model-view matrix
-            //glTranslatef(-1.0f, 0.0f, -2.0f);
-
-            // Draw a triangle of 3 vertices
-            glDrawArrays(GL_TRIANGLES, 0, 3);
-            glColor3f(0.5f,0.5f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 3, 3);
-            glColor3f(0.5f,0.0f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 6, 3);
-            glColor3f(0.0f,0.5f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 9, 3);
-            glColor3f(0.5f,0.5f,0.0f);
-            glDrawArrays(GL_TRIANGLES, 12, 3);
-            glColor3f(0.5f,1f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 15, 3);
-            glColor3f(0f,0.5f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 18, 3);
-            glColor3f(0.5f,0.5f,0.0f);
-            glDrawArrays(GL_TRIANGLES, 21, 3);
-            glColor3f(0.5f,1f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 24, 3);
-            glColor3f(0f,0.5f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 27, 3);
-            glColor3f(0.5f,0.5f,0.0f);
-            glDrawArrays(GL_TRIANGLES, 30, 3);
-            glColor3f(0.5f,1f,1.0f);
-            glDrawArrays(GL_TRIANGLES, 33, 3);
-            glColor3f(0.5f,0.5f,0.0f);
-
-            glRotatef(.15f, .1f,.1f,.1f);
-
-            glTranslatef(1.0f, 0.0f, 2.0f);
-
-            // Disable our location
-            glDisableVertexAttribArray(0);
-            glBindVertexArray(0);
-
-            glfwSwapBuffers(window); // swap the color buffers
-
-            // Poll for window events. The key callback above will only be
-            // invoked during this call.
-            glfwPollEvents();
+    public void cleanup() {
+        if (shaderProgram != null) {
+            shaderProgram.cleanup();
         }
-        glBindVertexArray(0);
-        glDeleteVertexArrays(vaoID);
-
-        glBindBuffer(GL_ARRAY_BUFFER, 0);
-        glDeleteBuffers(vboID);
     }
 }
